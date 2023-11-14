@@ -6,7 +6,7 @@ import mne
 import numpy as np
 import pandas as pd
 
-from kids import postprocess, preprocess, read_raw_csv
+from kids import postprocess, preprocess, read_raw_csv, metrics
 
 
 def test_read_raw_csv():
@@ -50,3 +50,21 @@ def test_postprocess():
     # produce test_data
     postprocessed_path = join('test_data', 'kids', 'postprocessed')
     postprocess(preprocessed_path, amica_raw_path, postprocessed_path)
+
+
+def test_metrics():
+    preprocessed_path = join('test_data', 'kids', 'preprocessed')
+    postprocessed_path = join('test_data', 'kids', 'postprocessed')
+
+    with TemporaryDirectory() as metrics_dir:
+        metrics_path = join(metrics_dir, 'metrics.csv')
+        metrics(preprocessed_path, postprocessed_path, metrics_path)
+
+        assert len(listdir(metrics_dir)) == 1
+        res = pd.read_csv(metrics_path)
+        assert res.shape[0] == 2
+
+
+    # produce test_data
+    metrics_path = join('test_data', 'kids', 'metrics.csv')
+    metrics(preprocessed_path, postprocessed_path, metrics_path)

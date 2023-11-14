@@ -12,6 +12,7 @@ from utils import save_montage
 from mne.io import RawArray
 
 from save_edf import write_mne_edf
+from metrics import mean_pairwise_MI
 
 CHANNELS = ['Fp1', 'Fpz', 'Fp2', 'F3', 'Fz', 'F4', 'F7', 'F8', 'FC3', 'FCz', 'FC4', 'FT7', 'FT8', 'C3', 'Cz', 'C4',
     'CP3', 'CPz', 'CP4', 'P3', 'Pz', 'P4', 'TP7', 'TP8', 'T3', 'T4', 'T5', 'T6', 'O1', 'Oz', 'O2']
@@ -98,12 +99,31 @@ def postprocess(preprocessed_path: str, amica_raw_path: str, postprocessed_path:
         ica._ica_names = [f'ICA{i:03d}' for i in range(len(CHANNELS))]
         ica.current_fit = 'eeglab_no_svd'
         ica.pre_whitener_ = np.ones([len(CHANNELS), 1])
-        ica.pca_mean_ = np.zeros([len(CHANNELS), 1])
+        ica.pca_mean_ = np.zeros(len(CHANNELS))
         ica.pca_explained_variance_ = np.zeros([len(CHANNELS), len(CHANNELS)])
         ica.reject_ = None
 
         fn_out = fn.replace('.edf', '_amica_ica.fif')
         ica.save(join(postprocessed_path, fn_out), overwrite=True)
+
+
+def metrics(preprocessed_path: str, postprocessed_path: str, metrics_path: str) -> None:
+
+    preproc_fns = listdir(preprocessed_path)
+
+    res = []
+    for i in range(len(preproc_fns)):
+        fn = preproc_fns[i]
+        sample = mne.io.read_raw_edf(join(preprocessed_path, fn), preload=True)
+        ica_fn = fn.replace('.edf', '_amica_ica.fif')
+        ica = mne.preprocessing.read_ica(join(postprocessed_path, ica_fn))
+        mean_pmi = mean_pairwise_MI(ica, sample, bins=100)
+        res.append({
+            'fn': fn,
+            'mean_pmi': mean_pmi
+        })
+    
+    pd.DataFrame(res).to_csv(metrics_path, index=False)
 
 
 if __name__ == '__main__':
@@ -120,12 +140,19 @@ if __name__ == '__main__':
     postprocess_parser.add_argument('--amica-raw-path', type=str, required=True)
     postprocess_parser.add_argument('--postprocessed-path', type=str, required=True)
 
+    metrics_parser = subparsers.add_parser('metrics')
+    metrics_parser.add_argument('--preprocessed-path', type=str, required=True)
+    metrics_parser.add_argument('--postprocessed-path', type=str, required=True)
+    metrics_parser.add_argument('--metrics-path', type=str, required=True)
+
     args = parser.parse_args()
 
     if args.command == 'preprocess':
         preprocess(raw_path=args.raw_path, preprocessed_path=args.preprocessed_path, montage_path=args.montage_path)
     elif args.command == 'postprocess':
         postprocess(preprocessed_path=args.preprocessed_path, amica_raw_path=args.amica_raw_path, postprocessed_path=args.postprocessed_path)
+    elif args.command == 'metrics':
+        metrics(preprocessed_path=args.preprocessed_path, postprocessed_path=args.postprocessed_path, metrics_path=args.metrics_path)
     else:
         parser.print_help()
         sys.exit(1)
